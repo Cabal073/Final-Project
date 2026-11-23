@@ -26,17 +26,6 @@ The file is called `Video_Games_Sales_Cleaned.csv`. It has 18,832 games and 8 co
 
 Random Forest was slightly better on F1, but the difference is small. There are only 58 hits in the test set, so the scores are noisy. Also, some games came out on more than one console, so the same title can be in both the train and test sets. That probably makes the scores a bit too optimistic.
 
-## How to run
-
-Put `Video_Games_Sales_Cleaned.csv` in the same folder as the script, then run:
-
-```bash
-pip install pandas numpy matplotlib scikit-learn
-python finalproject.py
-```
-
-The plots will pop up one at a time, so close each window to keep going. Everything also gets saved to the `outputs/` folder, including the plots and `results.txt` with the classification reports.
-
 ## Files
 
 - `finalproject.py` is the full script.
