@@ -8,7 +8,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import (classification_report, ConfusionMatrixDisplay,
                              accuracy_score, precision_score, recall_score, f1_score)
 
@@ -49,7 +49,7 @@ print(sub.groupby("console")["success"].agg(["count", "mean"]).round(3))
 print(sub.groupby("genre")["success"].agg(["count", "mean"]).round(3))
 print("Real critic scores:", sub["has_critic_score"].sum(), "of", len(sub))
 
-# Hit rate by release year (release_year was an important feature, so check why)
+# Hit rate by release year
 year_table = sub.groupby("release_year")["success"].agg(["count", "mean"]).round(3)
 print(year_table)
 extra_text.append("Hit rate by release year:\n" + year_table.to_string())
@@ -146,37 +146,38 @@ plt.grid(alpha=0.3)
 plt.savefig(OUT / "04_lr_tuning.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Model 2: Random Forest (no scaling needed for trees)
-rf_pipe = Pipeline([
+# %% Model 2: Decision Tree (no scaling needed for trees)
+dt_pipe = Pipeline([
     ("impute", SimpleImputer(strategy="median")),
-    ("model", RandomForestClassifier(class_weight="balanced", random_state=42))
+    ("model", DecisionTreeClassifier(class_weight="balanced", random_state=42))
 ])
-rf_grid = {
-    "model__n_estimators": [50, 100, 200],   # number of trees
-    "model__max_depth": [3, 5, 10, None]     # how deep each tree can grow
+dt_grid = {
+    "model__max_depth": [2, 3, 5, 7, 10, None],     # how deep the tree can grow
+    "model__criterion": ["gini", "entropy"]         # how a split is scored
 }
-rf_search = GridSearchCV(rf_pipe, rf_grid, cv=5, scoring="f1", n_jobs=1)
-rf_search.fit(X_train, y_train)
-print("RF best params:", rf_search.best_params_)
-print("RF best CV F1: %.3f" % rf_search.best_score_)
+dt_search = GridSearchCV(dt_pipe, dt_grid, cv=5, scoring="f1", n_jobs=1)
+dt_search.fit(X_train, y_train)
+print("DT best params:", dt_search.best_params_)
+print("DT best CV F1: %.3f" % dt_search.best_score_)
 
-res_rf = pd.DataFrame(rf_search.cv_results_)
-res_rf["depth"] = res_rf["param_model__max_depth"].astype(str)
+res_dt = pd.DataFrame(dt_search.cv_results_)
+res_dt["depth"] = res_dt["param_model__max_depth"].astype(str)
+order = ["2", "3", "5", "7", "10", "None"]
 plt.figure(figsize=(7, 4))
-for d in res_rf["depth"].unique():
-    s = res_rf[res_rf["depth"] == d].sort_values("param_model__n_estimators")
-    plt.plot(s["param_model__n_estimators"], s["mean_test_score"], marker="o", label=f"max_depth={d}")
-plt.xlabel("n_estimators")
+for crit in ["gini", "entropy"]:
+    s = res_dt[res_dt["param_model__criterion"] == crit].set_index("depth").loc[order]
+    plt.plot(order, s["mean_test_score"], marker="o", label=crit)
+plt.xlabel("max_depth")
 plt.ylabel("CV F1 (hit class)")
-plt.title("Random Forest: CV F1 vs number of trees")
-plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1))   # legend outside so it doesn't cover a line
+plt.title("Decision Tree: CV F1 vs max depth")
+plt.legend(title="criterion")
 plt.grid(alpha=0.3)
-plt.savefig(OUT / "05_rf_tuning.png", dpi=200, bbox_inches="tight")
+plt.savefig(OUT / "05_dt_tuning.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% Train and test results for both models
 lr_best = lr_search.best_estimator_
-rf_best = rf_search.best_estimator_
+dt_best = dt_search.best_estimator_
 report_text = []
 
 def show_results(name, model, tag):
@@ -193,11 +194,11 @@ def show_results(name, model, tag):
         plt.show()
 
 show_results("Logistic Regression", lr_best, "06_lr_confusion")
-show_results("Random Forest", rf_best, "07_rf_confusion")
+show_results("Decision Tree", dt_best, "07_dt_confusion")
 
 # %% Compare the two models on the test set
 scores = {}
-for name, model in [("Logistic Regression", lr_best), ("Random Forest", rf_best)]:
+for name, model in [("Logistic Regression", lr_best), ("Decision Tree", dt_best)]:
     pred = model.predict(X_test)
     scores[name] = {
         "Accuracy": accuracy_score(y_test, pred),
@@ -221,15 +222,15 @@ X_new, y_new = X_test.loc[new_mask], y_test.loc[new_mask]
 line = f"Test rows with an unseen title: {len(X_new)} | hits: {y_new.sum()}"
 print("\n" + line)
 extra_text.append("\n" + line)
-for name, model in [("Logistic Regression", lr_best), ("Random Forest", rf_best)]:
+for name, model in [("Logistic Regression", lr_best), ("Decision Tree", dt_best)]:
     f1_new = f1_score(y_new, model.predict(X_new), zero_division=0)
     line = f"{name} F1 on unseen titles: {f1_new:.3f}"
     print(line)
     extra_text.append(line)
 
-# %% Which features mattered most? (Random Forest)
-imp = pd.Series(rf_best.named_steps["model"].feature_importances_, index=X.columns)
-imp.sort_values().tail(10).plot(kind="barh", figsize=(7, 4), title="Random Forest: top 10 features")
+# %% Which features mattered most? (Decision Tree)
+imp = pd.Series(dt_best.named_steps["model"].feature_importances_, index=X.columns)
+imp.sort_values().tail(10).plot(kind="barh", figsize=(7, 4), title="Decision Tree: top 10 features")
 plt.tight_layout()
 plt.savefig(OUT / "09_feature_importance.png", dpi=200, bbox_inches="tight")
 plt.show()
@@ -237,7 +238,7 @@ plt.show()
 # %% Save text results
 with open(OUT / "results.txt", "w") as f:
     f.write(f"LR best params: {lr_search.best_params_}, CV F1 {lr_search.best_score_:.3f}\n")
-    f.write(f"RF best params: {rf_search.best_params_}, CV F1 {rf_search.best_score_:.3f}\n\n")
+    f.write(f"DT best params: {dt_search.best_params_}, CV F1 {dt_search.best_score_:.3f}\n\n")
     f.write("\n\n".join(report_text))
     f.write("\n\nTest-set comparison:\n" + compare.round(3).to_string())
     f.write(f"\nAlways-'Not hit' accuracy on test: {baseline:.3f}\n\n")
