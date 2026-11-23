@@ -1,6 +1,6 @@
 # Predicting Video Game Hits (PS2, Xbox, GameCube)
 
-This project tries to predict whether a PS2, Xbox, or GameCube game released between 2000 and 2006 sold more than 1 million copies. I used two models, Logistic Regression and Random Forest, and compared them.
+This project tries to predict whether a PS2, Xbox, or GameCube game released between 2000 and 2006 sold more than 1 million copies. I used two models, Logistic Regression and a Decision Tree, and compared them.
 
 ## Dataset
 
@@ -12,19 +12,21 @@ The file is called `Video_Games_Sales_Cleaned.csv`. It has 18,832 games and 8 co
 
 - Made the label: 1 if the game sold more than 1 million copies, 0 if not.
 - Found that about 78% of the critic scores were exactly 7.3, which looks like the dataset filled in missing scores with the median. I treated those as missing and added a column that says if a game has a real score.
-- One-hot encoded console and genre, then did an 80/20 train/test split.
+- One-hot encoded console and genre, then did an 80/20 train/test split (2,243 train and 561 test).
 - Used 5-fold cross-validation with GridSearchCV to tune both models, scored on F1 for the hit class.
-- Logistic Regression: tuned `C` and `class_weight`.
-- Random Forest: tuned `n_estimators` and `max_depth`.
+- Logistic Regression: tuned `C` and `class_weight`. The best was `C=0.1` with `class_weight="balanced"`.
+- Decision Tree: tuned `max_depth` and `criterion`. The best was `gini` with `max_depth=7`.
 
 ## Results
 
-| Model | Test F1 | Precision | Recall |
-|---|---|---|---|
-| Logistic Regression | 0.309 | 0.194 | 0.759 |
-| Random Forest | 0.333 | 0.230 | 0.603 |
+| Model | CV F1 | Test F1 | Precision | Recall |
+|---|---|---|---|---|
+| Logistic Regression | 0.324 | 0.309 | 0.194 | 0.759 |
+| Decision Tree | 0.308 | 0.319 | 0.206 | 0.707 |
 
-Random Forest was slightly better on F1, but the difference is small. There are only 58 hits in the test set, so the scores are noisy. Also, some games came out on more than one console, so the same title can be in both the train and test sets. That probably makes the scores a bit too optimistic.
+The two models did about the same. The differences are small and there are only 58 hits in the test set, so the scores are noisy. Always guessing "not a hit" would get 89.7% accuracy, which is why I used F1 instead of accuracy.
+
+Some games came out on more than one console, so the same title can be in both the train and test sets. When I only scored the test games whose title was not in the training set, the F1 dropped to 0.255 for Logistic Regression and 0.281 for the Decision Tree. So the scores above are probably a bit too optimistic.
 
 ## Files
 
