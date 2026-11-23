@@ -1,4 +1,4 @@
-# %% Setup
+# Setup
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -21,17 +21,17 @@ OUT.mkdir(exist_ok=True)
 
 extra_text = []   # lines that get written to results.txt at the end
 
-# %% Load data
+# Load data
 df = pd.read_csv(BASE / "Video_Games_Sales_Cleaned.csv")
 print("Full dataset:", df.shape)
 
-# %% Keep only PS2, Xbox, GameCube games from 2000-2006
+# Keep only PS2, Xbox, GameCube games from 2000-2006
 sub = df[df["console"].isin(["PS2", "XB", "GC"])].copy()
 sub = sub[sub["release_year"].between(2000, 2006)].copy()
 sub["release_year"] = sub["release_year"].astype(int)
 print("After filtering:", sub.shape)
 
-# %% Cleaning
+# Cleaning
 # 22 games have 0 sales, which is probably missing data, so drop them
 sub = sub[sub["total_sales"] > 0].copy()
 
@@ -54,7 +54,7 @@ year_table = sub.groupby("release_year")["success"].agg(["count", "mean"]).round
 print(year_table)
 extra_text.append("Hit rate by release year:\n" + year_table.to_string())
 
-# %% Class distribution plot
+# Class distribution plot
 ax = sub["success"].value_counts().sort_index().plot(kind="bar", color=["gray", "seagreen"])
 ax.set_xticks([0, 1])
 ax.set_xticklabels(["Not hit (<=1M)", "Hit (>1M)"], rotation=0)
@@ -64,7 +64,7 @@ ax.set_title("Class distribution")
 plt.savefig(OUT / "01_class_distribution.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% EDA plot 1: hit rate by console and genre
+# EDA plot 1: hit rate by console and genre
 by_console = sub.groupby("console")["success"].mean()
 by_genre = sub.groupby("genre")["success"].agg(["count", "mean"])
 by_genre = by_genre[by_genre["count"] >= 30]["mean"].sort_values()
@@ -79,7 +79,7 @@ plt.tight_layout()
 plt.savefig(OUT / "02_eda_console_genre.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% EDA plot 2: critic score for hits vs non-hits (real scores only)
+# EDA plot 2: critic score for hits vs non-hits (real scores only)
 real = sub[sub["has_critic_score"] == 1]
 real.boxplot(column="critic_score", by="success", figsize=(5, 4))
 plt.title("Critic score by outcome (real scores only)")
@@ -89,7 +89,7 @@ plt.xlabel("")
 plt.savefig(OUT / "03_eda_critic_score.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Encoding and train/test split
+# Encoding and train/test split
 # One-hot encode console and genre (turn each category into a 0/1 column)
 X = pd.get_dummies(
     sub[["console", "genre", "release_year", "critic_score", "has_critic_score"]],
@@ -113,7 +113,7 @@ print("Test rows whose title is also in train:", overlap_mask.sum(), "of", len(X
 extra_text.append(f"Titles in both train and test: {n_overlap_titles}\n"
                   f"Test rows whose title is also in train: {overlap_mask.sum()} of {len(X_test)}")
 
-# %% Model 1: Logistic Regression
+# Model 1: Logistic Regression
 # The pipeline fills missing critic scores with the median, scales the features,
 # then fits the model. Inside GridSearchCV this is redone on each fold, so
 # nothing from the validation fold leaks into the preprocessing.
@@ -146,7 +146,7 @@ plt.grid(alpha=0.3)
 plt.savefig(OUT / "04_lr_tuning.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Model 2: Decision Tree (no scaling needed for trees)
+# Model 2: Decision Tree (no scaling needed for trees)
 dt_pipe = Pipeline([
     ("impute", SimpleImputer(strategy="median")),
     ("model", DecisionTreeClassifier(class_weight="balanced", random_state=42))
@@ -175,7 +175,7 @@ plt.grid(alpha=0.3)
 plt.savefig(OUT / "05_dt_tuning.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Train and test results for both models
+# Train and test results for both models
 lr_best = lr_search.best_estimator_
 dt_best = dt_search.best_estimator_
 report_text = []
@@ -196,7 +196,7 @@ def show_results(name, model, tag):
 show_results("Logistic Regression", lr_best, "06_lr_confusion")
 show_results("Decision Tree", dt_best, "07_dt_confusion")
 
-# %% Compare the two models on the test set
+# Compare the two models on the test set
 scores = {}
 for name, model in [("Logistic Regression", lr_best), ("Decision Tree", dt_best)]:
     pred = model.predict(X_test)
@@ -216,7 +216,7 @@ plt.ylabel("Score")
 plt.savefig(OUT / "08_model_comparison.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Sanity check: score only the test games whose title is NOT in the training set
+# Sanity check: score only the test games whose title is NOT in the training set
 new_mask = ~overlap_mask
 X_new, y_new = X_test.loc[new_mask], y_test.loc[new_mask]
 line = f"Test rows with an unseen title: {len(X_new)} | hits: {y_new.sum()}"
@@ -228,14 +228,14 @@ for name, model in [("Logistic Regression", lr_best), ("Decision Tree", dt_best)
     print(line)
     extra_text.append(line)
 
-# %% Which features mattered most? (Decision Tree)
+# Which features mattered most? (Decision Tree)
 imp = pd.Series(dt_best.named_steps["model"].feature_importances_, index=X.columns)
 imp.sort_values().tail(10).plot(kind="barh", figsize=(7, 4), title="Decision Tree: top 10 features")
 plt.tight_layout()
 plt.savefig(OUT / "09_feature_importance.png", dpi=200, bbox_inches="tight")
 plt.show()
 
-# %% Save text results
+# Save text results
 with open(OUT / "results.txt", "w") as f:
     f.write(f"LR best params: {lr_search.best_params_}, CV F1 {lr_search.best_score_:.3f}\n")
     f.write(f"DT best params: {dt_search.best_params_}, CV F1 {dt_search.best_score_:.3f}\n\n")
